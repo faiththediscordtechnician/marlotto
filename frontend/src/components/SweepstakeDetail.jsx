@@ -1,14 +1,13 @@
 import React, { useState } from 'react';
+import EntryForm from './EntryForm';
 
 export default function SweepstakeDetail({ sweepstake, onBack, onUpdated }) {
+  const [showEntryForm, setShowEntryForm] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [submitted, setSubmitted] = useState(false);
-  const [timeSpent, setTimeSpent] = useState('');
-  const [notes, setNotes] = useState('');
-  const [addressUsed, setAddressUsed] = useState('colorado');
 
-  const handleSubmit = async () => {
+  const handleEntryFormSubmit = async (formData) => {
     try {
       setLoading(true);
       setError(null);
@@ -18,9 +17,9 @@ export default function SweepstakeDetail({ sweepstake, onBack, onUpdated }) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           sweepstake_id: sweepstake.id,
-          time_spent_minutes: timeSpent ? parseInt(timeSpent) : null,
-          notes: notes || null,
-          address_used: addressUsed,
+          time_spent_minutes: formData.timeSpentMinutes,
+          notes: formData.notes || null,
+          address_used: formData.addressUsed,
         }),
       });
 
@@ -48,6 +47,16 @@ export default function SweepstakeDetail({ sweepstake, onBack, onUpdated }) {
           🎉 Entry submitted! Good luck!
         </div>
       </div>
+    );
+  }
+
+  if (showEntryForm) {
+    return (
+      <EntryForm
+        sweepstake={sweepstake}
+        onSubmit={handleEntryFormSubmit}
+        onCancel={() => setShowEntryForm(false)}
+      />
     );
   }
 
@@ -109,50 +118,17 @@ export default function SweepstakeDetail({ sweepstake, onBack, onUpdated }) {
           </p>
         </div>
 
-        <div className="detail-section">
-          <h3>📮 Which Address?</h3>
-          <select
-            value={addressUsed}
-            onChange={(e) => setAddressUsed(e.target.value)}
-            className="filter-select"
-          >
-            <option value="colorado">Colorado</option>
-            <option value="canada">Canada</option>
-            <option value="other">Other</option>
-          </select>
-        </div>
-
-        <div className="detail-section">
-          <h3>⏱️ Time Spent (optional)</h3>
-          <input
-            type="number"
-            placeholder="Minutes"
-            value={timeSpent}
-            onChange={(e) => setTimeSpent(e.target.value)}
-            min="0"
-          />
-        </div>
-
-        <div className="detail-section">
-          <h3>📌 Notes</h3>
-          <textarea
-            value={notes}
-            onChange={(e) => setNotes(e.target.value)}
-            placeholder="Any notes about this entry..."
-            className="notes-textarea"
-          />
-        </div>
-
         <div className="form-actions">
           <button
-            onClick={handleSubmit}
+            onClick={() => setShowEntryForm(true)}
             disabled={loading}
             className="btn-primary"
+            style={{ fontSize: '1rem' }}
           >
-            {loading ? '⏳ Submitting...' : '✍️ Mark as Submitted'}
+            {loading ? '⏳ Processing...' : '✍️ Fill & Submit'}
           </button>
           <button onClick={onBack} disabled={loading} className="btn">
-            Cancel
+            Back
           </button>
         </div>
       </div>
