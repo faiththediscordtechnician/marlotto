@@ -1,8 +1,10 @@
 import React, { useState } from 'react';
 import Dashboard from './components/Dashboard';
+import ScrapePanel from './components/ScrapePanel';
 import SweepstakesList from './components/SweepstakesList';
 import SweepstakeDetail from './components/SweepstakeDetail';
-import AddEditForm from './components/AddEditForm';
+import EntriesHistory from './components/EntriesHistory';
+import UserSettings from './components/UserSettings';
 import './App.css';
 
 export default function App() {
@@ -20,8 +22,8 @@ export default function App() {
     setSelectedSweepstake(null);
   };
 
-  const handleAddNew = () => {
-    setView('add');
+  const handleScraped = () => {
+    setRefreshTrigger((prev) => prev + 1);
   };
 
   const handleUpdated = () => {
@@ -33,32 +35,48 @@ export default function App() {
   return (
     <div className="app">
       <header className="app-header">
-        <h1>🎰 Marlotto</h1>
-        <p>Sweepstakes Mail Entry Tracker</p>
+        <h1>🎁 Marlotto</h1>
+        <p>Digital Sweepstakes Engine</p>
       </header>
 
       <nav className="app-nav">
         <button
           className={`nav-btn ${view === 'dashboard' ? 'active' : ''}`}
-          onClick={() => handleBack()}
+          onClick={() => setView('dashboard')}
         >
-          Dashboard
+          📊 Dashboard
         </button>
         <button
           className={`nav-btn ${view === 'list' ? 'active' : ''}`}
           onClick={() => setView('list')}
         >
-          All Sweepstakes
+          🎯 Sweepstakes
+        </button>
+        <button
+          className={`nav-btn ${view === 'history' ? 'active' : ''}`}
+          onClick={() => setView('history')}
+        >
+          📋 History
+        </button>
+        <button
+          className={`nav-btn ${view === 'settings' ? 'active' : ''}`}
+          onClick={() => setView('settings')}
+        >
+          ⚙️ Settings
         </button>
       </nav>
 
       <main className="app-main">
-        {view === 'dashboard' && <Dashboard />}
+        {view === 'dashboard' && (
+          <>
+            <ScrapePanel onScraped={handleScraped} />
+            <Dashboard refreshTrigger={refreshTrigger} />
+          </>
+        )}
 
         {view === 'list' && (
           <SweepstakesList
             onSelectSweepstake={handleSelectSweepstake}
-            onAddNew={handleAddNew}
             refreshTrigger={refreshTrigger}
           />
         )}
@@ -71,16 +89,20 @@ export default function App() {
           />
         )}
 
-        {view === 'add' && (
-          <AddEditForm
+        {view === 'history' && (
+          <EntriesHistory
             onBack={handleBack}
-            onSaved={handleUpdated}
+            refreshTrigger={refreshTrigger}
           />
+        )}
+
+        {view === 'settings' && (
+          <UserSettings onBack={handleBack} />
         )}
       </main>
 
       <footer className="app-footer">
-        <p>&copy; 2025 Marlotto. Personal use only.</p>
+        <p>✨ Made with love for sweepstakes hunters • Marlotto 2025</p>
       </footer>
     </div>
   );

@@ -3,25 +3,37 @@ import { query } from './db.js';
 
 const router = express.Router();
 
-// GET /api/sweepstakes - Fetch all sweepstakes with optional filtering and sorting
+// ===== SWEEPSTAKES ROUTES =====
+
 router.get('/api/sweepstakes', async (req, res) => {
   try {
-    const { status, sortBy } = req.query;
-
-    let sql = 'SELECT * FROM sweepstakes WHERE 1=1';
+    const { source, minPrize, difficulty, status, sortBy } = req.query;
+    let sql = 'SELECT * FROM sweepstakes WHERE is_active = TRUE';
     const params = [];
+    let paramIndex = 1;
 
-    if (status) {
-      sql += ' AND status = $' + (params.length + 1);
-      params.push(status);
+    if (source) {
+      sql += ` AND source = $${paramIndex}`;
+      params.push(source);
+      paramIndex++;
     }
 
-    if (sortBy === 'deadline') {
-      sql += ' ORDER BY deadline ASC';
-    } else if (sortBy === 'prize') {
+    if (minPrize) {
+      sql += ` AND prize_value >= $${paramIndex}`;
+      params.push(parseInt(minPrize));
+      paramIndex++;
+    }
+
+    if (difficulty) {
+      sql += ` AND difficulty_score <= $${paramIndex}`;
+      params.push(parseInt(difficulty));
+      paramIndex++;
+    }
+
+    if (sortBy === 'prize') {
       sql += ' ORDER BY prize_value DESC NULLS LAST';
-    } else if (sortBy === 'added') {
-      sql += ' ORDER BY date_added DESC';
+    } else if (sortBy === 'difficulty') {
+      sql += ' ORDER BY difficulty_score ASC';
     } else {
       sql += ' ORDER BY deadline ASC';
     }
@@ -34,71 +46,79 @@ router.get('/api/sweepstakes', async (req, res) => {
   }
 });
 
-// POST /api/sweepstakes - Add a new sweepstake
+router.get('/api/sweepstakes/:id', async (req, res) => {
+  try {
+    const result = await query('SELECT * FROM sweepstakes WHERE id = $1', [req.params.id]);
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Sweepstake not found' });
+    }
+    res.json(result.rows[0]);
+  } catch (err) {
+    console.error('Error fetching sweepstake:', err);
+    res.status(500).json({ error: 'Failed to fetch sweepstake' });
+  }
+});
+
 router.post('/api/sweepstakes', async (req, res) => {
   try {
     const {
       name,
+      url,
       prize_value,
       deadline,
-      mail_address_street,
-      mail_address_city,
-      mail_address_state,
-      mail_address_zip,
+      source,
+      entry_type,
+      difficulty_score,
+      requires_social,
       instructions,
+      entry_url,
       notes,
     } = req.body;
 
-    if (!name || !deadline) {
-      return res.status(400).json({ error: 'Name and deadline are required' });
+    if (!name || !url || !deadline) {
+      return res.status(400).json({ error: 'Name, URL, and deadline are required' });
     }
 
     const sql = `
       INSERT INTO sweepstakes (
-        name, prize_value, deadline, mail_address_street,
-        mail_address_city, mail_address_state, mail_address_zip,
-        instructions, notes
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+        name, url, prize_value, deadline, source, entry_type,
+        difficulty_score, requires_social, instructions, entry_url, notes
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
       RETURNING *;
     `;
 
     const result = await query(sql, [
       name,
+      url,
       prize_value || null,
       deadline,
-      mail_address_street || null,
-      mail_address_city || null,
-      mail_address_state || null,
-      mail_address_zip || null,
+      source || 'manual',
+      entry_type || null,
+      difficulty_score || 5,
+      requires_social || false,
       instructions || null,
+      entry_url || url,
       notes || null,
     ]);
 
     res.status(201).json(result.rows[0]);
   } catch (err) {
+    if (err.code === '23505') {
+      return res.status(409).json({ error: 'Sweepstake with this URL already exists' });
+    }
     console.error('Error creating sweepstake:', err);
     res.status(500).json({ error: 'Failed to create sweepstake' });
   }
 });
 
-// PATCH /api/sweepstakes/:id - Update a sweepstake
 router.patch('/api/sweepstakes/:id', async (req, res) => {
   try {
-    const { id } = req.params;
-    const updates = req.body;
-
-    // Build dynamic update query
     const allowedFields = [
-      'name',
-      'prize_value',
-      'deadline',
-      'mail_address_street',
-      'mail_address_city',
-      'mail_address_state',
-      'mail_address_zip',
+      'difficulty_score',
+      'requires_social',
       'instructions',
-      'status',
       'notes',
+      'is_active',
     ];
 
     const updateFields = [];
@@ -106,9 +126,9 @@ router.patch('/api/sweepstakes/:id', async (req, res) => {
     let paramIndex = 1;
 
     for (const field of allowedFields) {
-      if (field in updates) {
+      if (field in req.body) {
         updateFields.push(`${field} = $${paramIndex}`);
-        params.push(updates[field]);
+        params.push(req.body[field]);
         paramIndex++;
       }
     }
@@ -117,12 +137,7 @@ router.patch('/api/sweepstakes/:id', async (req, res) => {
       return res.status(400).json({ error: 'No valid fields to update' });
     }
 
-    // Add status_updated_at if status is being updated
-    if ('status' in updates) {
-      updateFields.push(`status_updated_at = CURRENT_TIMESTAMP`);
-    }
-
-    params.push(id);
+    params.push(req.params.id);
     const sql = `
       UPDATE sweepstakes
       SET ${updateFields.join(', ')}
@@ -131,7 +146,6 @@ router.patch('/api/sweepstakes/:id', async (req, res) => {
     `;
 
     const result = await query(sql, params);
-
     if (result.rows.length === 0) {
       return res.status(404).json({ error: 'Sweepstake not found' });
     }
@@ -143,59 +157,235 @@ router.patch('/api/sweepstakes/:id', async (req, res) => {
   }
 });
 
-// DELETE /api/sweepstakes/:id - Remove a sweepstake
 router.delete('/api/sweepstakes/:id', async (req, res) => {
   try {
-    const { id } = req.params;
-
-    const sql = 'DELETE FROM sweepstakes WHERE id = $1 RETURNING *;';
-    const result = await query(sql, [id]);
-
+    const result = await query('DELETE FROM sweepstakes WHERE id = $1 RETURNING id;', [req.params.id]);
     if (result.rows.length === 0) {
       return res.status(404).json({ error: 'Sweepstake not found' });
     }
-
-    res.json({ message: 'Sweepstake deleted successfully' });
+    res.json({ message: 'Deleted successfully' });
   } catch (err) {
     console.error('Error deleting sweepstake:', err);
     res.status(500).json({ error: 'Failed to delete sweepstake' });
   }
 });
 
-// GET /api/dashboard - Return dashboard stats
-router.get('/api/dashboard', async (req, res) => {
+// ===== ENTRIES ROUTES =====
+
+router.post('/api/entries', async (req, res) => {
   try {
-    const totalResult = await query('SELECT COUNT(*) as count FROM sweepstakes;');
-    const total = totalResult.rows[0].count;
+    const { sweepstake_id, address_used, time_spent_minutes, notes } = req.body;
 
-    const statusResult = await query(
-      `SELECT status, COUNT(*) as count FROM sweepstakes GROUP BY status;`
-    );
-    const statusCounts = {};
-    statusResult.rows.forEach((row) => {
-      statusCounts[row.status] = parseInt(row.count);
-    });
+    if (!sweepstake_id) {
+      return res.status(400).json({ error: 'Sweepstake ID required' });
+    }
 
-    const upcomingResult = await query(
-      `SELECT COUNT(*) as count FROM sweepstakes
-       WHERE deadline BETWEEN CURRENT_DATE AND CURRENT_DATE + INTERVAL '7 days';`
-    );
-    const upcomingDeadlines = upcomingResult.rows[0].count;
+    const sql = `
+      INSERT INTO entries (sweepstake_id, submitted_at, address_used, time_spent_minutes, notes)
+      VALUES ($1, CURRENT_TIMESTAMP, $2, $3, $4)
+      RETURNING *;
+    `;
+
+    const result = await query(sql, [
+      sweepstake_id,
+      address_used || 'colorado',
+      time_spent_minutes || null,
+      notes || null,
+    ]);
+
+    res.status(201).json(result.rows[0]);
+  } catch (err) {
+    console.error('Error creating entry:', err);
+    res.status(500).json({ error: 'Failed to create entry' });
+  }
+});
+
+router.patch('/api/entries/:id', async (req, res) => {
+  try {
+    const allowedFields = ['outcome', 'time_spent_minutes', 'notes'];
+    const updateFields = [];
+    const params = [];
+    let paramIndex = 1;
+
+    for (const field of allowedFields) {
+      if (field in req.body) {
+        updateFields.push(`${field} = $${paramIndex}`);
+        params.push(req.body[field]);
+        paramIndex++;
+      }
+    }
+
+    if (updateFields.length === 0) {
+      return res.status(400).json({ error: 'No valid fields to update' });
+    }
+
+    params.push(req.params.id);
+    const sql = `UPDATE entries SET ${updateFields.join(', ')} WHERE id = $${paramIndex} RETURNING *;`;
+
+    const result = await query(sql, params);
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Entry not found' });
+    }
+
+    res.json(result.rows[0]);
+  } catch (err) {
+    console.error('Error updating entry:', err);
+    res.status(500).json({ error: 'Failed to update entry' });
+  }
+});
+
+router.get('/api/entries', async (req, res) => {
+  try {
+    const { outcome } = req.query;
+    let sql = 'SELECT e.*, s.name, s.prize_value FROM entries e JOIN sweepstakes s ON e.sweepstake_id = s.id';
+    const params = [];
+
+    if (outcome) {
+      sql += ' WHERE e.outcome = $1';
+      params.push(outcome);
+    }
+
+    sql += ' ORDER BY e.submitted_at DESC';
+    const result = await query(sql, params);
+    res.json(result.rows);
+  } catch (err) {
+    console.error('Error fetching entries:', err);
+    res.status(500).json({ error: 'Failed to fetch entries' });
+  }
+});
+
+// ===== USER INFO ROUTES =====
+
+router.get('/api/user-info', async (req, res) => {
+  try {
+    const result = await query('SELECT * FROM user_info ORDER BY address_label');
+    res.json(result.rows);
+  } catch (err) {
+    console.error('Error fetching user info:', err);
+    res.status(500).json({ error: 'Failed to fetch user info' });
+  }
+});
+
+router.get('/api/user-info/:label', async (req, res) => {
+  try {
+    const result = await query('SELECT * FROM user_info WHERE address_label = $1', [req.params.label]);
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Address not found' });
+    }
+    res.json(result.rows[0]);
+  } catch (err) {
+    console.error('Error fetching user info:', err);
+    res.status(500).json({ error: 'Failed to fetch user info' });
+  }
+});
+
+router.post('/api/user-info', async (req, res) => {
+  try {
+    const {
+      address_label,
+      full_name,
+      email,
+      phone,
+      street_address,
+      city,
+      state_province,
+      zip_postal,
+      country,
+      date_of_birth,
+    } = req.body;
+
+    if (!address_label) {
+      return res.status(400).json({ error: 'Address label required' });
+    }
+
+    const sql = `
+      INSERT INTO user_info (
+        address_label, full_name, email, phone, street_address,
+        city, state_province, zip_postal, country, date_of_birth
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+      ON CONFLICT (address_label) DO UPDATE SET
+        full_name = $2, email = $3, phone = $4, street_address = $5,
+        city = $6, state_province = $7, zip_postal = $8, country = $9, date_of_birth = $10
+      RETURNING *;
+    `;
+
+    const result = await query(sql, [
+      address_label,
+      full_name || null,
+      email || null,
+      phone || null,
+      street_address || null,
+      city || null,
+      state_province || null,
+      zip_postal || null,
+      country || null,
+      date_of_birth || null,
+    ]);
+
+    res.status(201).json(result.rows[0]);
+  } catch (err) {
+    console.error('Error saving user info:', err);
+    res.status(500).json({ error: 'Failed to save user info' });
+  }
+});
+
+// ===== STATS ROUTES =====
+
+router.get('/api/stats', async (req, res) => {
+  try {
+    const [totalSweeps, submitted, wins, pending] = await Promise.all([
+      query('SELECT COUNT(*) as count FROM sweepstakes WHERE is_active = TRUE'),
+      query('SELECT COUNT(*) as count FROM entries WHERE outcome != "won"'),
+      query('SELECT COUNT(*) as count FROM entries WHERE outcome = "won"'),
+      query('SELECT COUNT(*) as count FROM entries WHERE outcome = "pending"'),
+    ]);
 
     const prizeResult = await query(
-      'SELECT COALESCE(SUM(prize_value), 0) as total_prize FROM sweepstakes;'
+      'SELECT COALESCE(SUM(s.prize_value), 0) as total FROM entries e JOIN sweepstakes s ON e.sweepstake_id = s.id WHERE e.outcome = "won"'
     );
-    const totalPrizeValue = prizeResult.rows[0].total_prize;
+
+    const timeResult = await query(
+      'SELECT COALESCE(AVG(time_spent_minutes), 0) as avg_time FROM entries WHERE time_spent_minutes IS NOT NULL'
+    );
+
+    const weekResult = await query(
+      `SELECT COUNT(*) as count FROM entries WHERE submitted_at > NOW() - INTERVAL '7 days'`
+    );
+
+    const totalSubmitted = parseInt(submitted.rows[0].count);
+    const totalWins = parseInt(wins.rows[0].count);
+    const winRate = totalSubmitted > 0 ? ((totalWins / totalSubmitted) * 100).toFixed(1) : 0;
 
     res.json({
-      total,
-      statusCounts,
-      upcomingDeadlines,
-      totalPrizeValue,
+      total_sweepstakes_available: parseInt(totalSweeps.rows[0].count),
+      total_submitted: totalSubmitted,
+      pending_outcomes: parseInt(pending.rows[0].count),
+      wins_count: totalWins,
+      win_rate_percent: parseFloat(winRate),
+      total_prize_value_won: parseInt(prizeResult.rows[0].total),
+      avg_time_per_entry_minutes: parseFloat(timeResult.rows[0].avg_time),
+      submissions_this_week: parseInt(weekResult.rows[0].count),
     });
   } catch (err) {
-    console.error('Error fetching dashboard:', err);
-    res.status(500).json({ error: 'Failed to fetch dashboard data' });
+    console.error('Error fetching stats:', err);
+    res.status(500).json({ error: 'Failed to fetch stats' });
+  }
+});
+
+router.get('/api/stats/by-source', async (req, res) => {
+  try {
+    const result = await query(`
+      SELECT s.source, COUNT(e.id) as submissions, COUNT(CASE WHEN e.outcome = 'won' THEN 1 END) as wins
+      FROM sweepstakes s
+      LEFT JOIN entries e ON s.id = e.sweepstake_id
+      WHERE s.is_active = TRUE
+      GROUP BY s.source
+      ORDER BY wins DESC;
+    `);
+    res.json(result.rows);
+  } catch (err) {
+    console.error('Error fetching source stats:', err);
+    res.status(500).json({ error: 'Failed to fetch source stats' });
   }
 });
 
