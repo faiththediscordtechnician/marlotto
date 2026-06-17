@@ -389,6 +389,69 @@ tbody tr.deadline-soon {
   resize: vertical;
 }
 
+/* ===== Analytics ===== */
+.roi-section {
+  margin: 2rem 0;
+}
+
+.source-section {
+  margin: 2rem 0;
+}
+
+.source-section table {
+  width: 100%;
+}
+
+.source-section thead th {
+  background: linear-gradient(90deg, var(--pastel-pink) 0%, var(--light-pink) 100%);
+  padding: 1rem;
+  font-weight: bold;
+  color: var(--darker-pink);
+  border-bottom: 2px solid var(--gray);
+}
+
+.source-section tbody td {
+  padding: 1rem;
+  border-bottom: 1px solid var(--light-gray);
+  color: var(--darker-pink);
+}
+
+.source-section tbody tr:hover {
+  background: var(--light-gray);
+}
+
+.insights-section {
+  background: var(--white);
+  border: 2px solid var(--gray);
+  border-radius: 6px;
+  padding: 2rem;
+  margin: 2rem 0;
+  box-shadow: 0 2px 4px rgba(255, 105, 180, 0.1);
+}
+
+.insight-card {
+  background: var(--light-gray);
+  padding: 1.5rem;
+  border-radius: 4px;
+  color: var(--darker-pink);
+  line-height: 1.6;
+}
+
+.insight-card p {
+  margin: 0;
+}
+
+.stat-card.highlight {
+  background: linear-gradient(135deg, #FFE4E1 0%, #FFD1DC 100%);
+  border-color: var(--hot-pink);
+}
+
+.stat-subtitle {
+  color: var(--gray);
+  font-size: 0.85rem;
+  margin: 0.5rem 0 0 0;
+}
+
 .form-container h2 {
   color: var(--darker-pink);
   margin-bottom: 1.5rem;

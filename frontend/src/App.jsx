@@ -5,6 +5,7 @@ import SweepstakesList from './components/SweepstakesList';
 import SweepstakeDetail from './components/SweepstakeDetail';
 import EntriesHistory from './components/EntriesHistory';
 import UserSettings from './components/UserSettings';
+import StatsBreakdown from './components/StatsBreakdown';
 import './App.css';
 
 export default function App() {
@@ -59,6 +60,12 @@ export default function App() {
           📋 History
         </button>
         <button
+          className={`nav-btn ${view === 'analytics' ? 'active' : ''}`}
+          onClick={() => setView('analytics')}
+        >
+          💹 Analytics
+        </button>
+        <button
           className={`nav-btn ${view === 'settings' ? 'active' : ''}`}
           onClick={() => setView('settings')}
         >
@@ -94,6 +101,10 @@ export default function App() {
             onBack={handleBack}
             refreshTrigger={refreshTrigger}
           />
+        )}
+
+        {view === 'analytics' && (
+          <StatsBreakdown onBack={handleBack} />
         )}
 
         {view === 'settings' && (

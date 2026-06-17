@@ -389,4 +389,56 @@ router.get('/api/stats/by-source', async (req, res) => {
   }
 });
 
+router.get('/api/stats/roi', async (req, res) => {
+  try {
+    // Get total prize value won
+    const prizeResult = await query(`
+      SELECT COALESCE(SUM(s.prize_value), 0) as total_prize
+      FROM entries e
+      JOIN sweepstakes s ON e.sweepstake_id = s.id
+      WHERE e.outcome = 'won';
+    `);
+
+    // Get total time invested (in hours)
+    const timeResult = await query(`
+      SELECT COALESCE(SUM(time_spent_minutes), 0) as total_minutes
+      FROM entries
+      WHERE outcome != 'pending';
+    `);
+
+    const totalPrize = parseInt(prizeResult.rows[0].total_prize);
+    const totalMinutes = parseInt(timeResult.rows[0].total_minutes);
+    const totalHours = Math.max(1, totalMinutes / 60); // Avoid division by zero
+
+    const roi = (totalPrize / totalHours).toFixed(2);
+
+    res.json({
+      total_prize_value: totalPrize,
+      total_hours_invested: totalHours.toFixed(1),
+      roi_per_hour: roi,
+      roi_per_minute: (totalPrize / Math.max(1, totalMinutes)).toFixed(2),
+    });
+  } catch (err) {
+    console.error('Error calculating ROI:', err);
+    res.status(500).json({ error: 'Failed to calculate ROI' });
+  }
+});
+
+router.get('/api/stats/timeline', async (req, res) => {
+  try {
+    const result = await query(`
+      SELECT DATE(submitted_at) as date, COUNT(*) as count
+      FROM entries
+      WHERE submitted_at IS NOT NULL
+      GROUP BY DATE(submitted_at)
+      ORDER BY DATE(submitted_at) DESC
+      LIMIT 30;
+    `);
+    res.json(result.rows);
+  } catch (err) {
+    console.error('Error fetching timeline:', err);
+    res.status(500).json({ error: 'Failed to fetch timeline' });
+  }
+});
+
 export default router;
